@@ -1,49 +1,416 @@
-let lastTiltAngle = null;
-
-// 가로 모드 기준 센서 감지 함수
-function handleOrientation(e) {
-  if (isDropping || isFinished) return;
-
-  // 현재 기기의 회전 방향 확인 (90: 시계방향 가로, -90 또는 270: 반시계방향 가로)
-  const orientationAngle = (screen.orientation && screen.orientation.angle !== undefined)
-    ? screen.orientation.angle
-    : (window.orientation || 0);
-
-  const beta = e.beta || 0;   // 세로 기준 앞뒤 기울기 (-180 ~ 180)
-  const gamma = e.gamma || 0; // 세로 기준 좌우 기울기 (-90 ~ 90)
-
-  // 가로 방향에 따른 실시간 좌우 틸트 각도 계산
-  let currentTilt = 0;
-  if (Math.abs(orientationAngle) === 90 || orientationAngle === 270) {
-    // 가로 모드일 때는 beta가 사용자의 체감상 '좌우 틸트'가 됨
-    // 폰 머리가 왼쪽인지 오른쪽인지에 따라 방향 부호 반전 보정
-    currentTilt = (orientationAngle === 90) ? beta : -beta;
-  } else {
-    // 혹시 가로 고정이 안 풀렸거나 데스크톱/기타 환경일 때의 폴백 (gamma 사용)
-    currentTilt = gamma;
-  }
-
-  // 1. 민감도 설정: 가로 화면은 폭(width)이 넓으므로 민감도 계수를 약 18~22로 세팅
-  // 살짝(±10도 내외)만 양손을 기울여도 집게가 가로 화면 전체를 부드럽게 커버함
-  const SENSITIVITY = 20;
-  const screenW = window.innerWidth;
-
-  targetX = (screenW / 2) + (currentTilt * SENSITIVITY);
-  // 화면 양끝 이탈 방지 마진 (좌우 60px)
-  targetX = Math.max(60, Math.min(screenW - 60, targetX));
-
-  // 2. 가만히 있는 상태(정지 범위) 판정:
-  // 가로 모드로 양손으로 쥐면 한 손 세로 파지보다 안정적이지만,
-  // 여전히 관객의 미세한 맥박/호흡 떨림을 감안해 1.5도 이내의 흔들림은 '정지'로 간주 (민감도 낮춤)
-  if (lastTiltAngle !== null) {
-    const delta = Math.abs(currentTilt - lastTiltAngle);
-    if (delta < 1.5) {
-      if (!stillStartTime) stillStartTime = performance.now();
-    } else {
-      // 손을 의도적으로 기울여 이동시키면 프로그레스 리셋
-      stillStartTime = null;
-      updateProgress(0);
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>붕어아이스크림 뽑기 (가로 모드)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
     }
-  }
-  lastTiltAngle = currentTilt;
-}
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: #ffffff;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    /* 시작 및 센서 권한 요청 버튼 */
+    #start-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 100;
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    /* 상단 안내 문구 */
+    #guide-text {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 15px;
+      font-weight: 500;
+      color: #555;
+      text-align: center;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    /* 우측 상단 원형 타이머 */
+    #timer-container {
+      position: absolute;
+      top: 15px;
+      right: 25px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 20;
+    }
+    #timer-label {
+      font-size: 12px;
+      font-weight: bold;
+      color: #111;
+      margin-bottom: 4px;
+    }
+    .progress-svg {
+      width: 58px;
+      height: 58px;
+      transform: rotate(-90deg); /* 12시 방향부터 채움 */
+    }
+    .circle-bg {
+      fill: none;
+      stroke: #111111;
+      stroke-width: 6;
+    }
+    .circle-fill {
+      fill: none;
+      stroke: #00e575; /* 2번 사진의 밝은 초록색 */
+      stroke-width: 6;
+      stroke-dasharray: 157; /* 2 * PI * 25 */
+      stroke-dashoffset: 157;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.05s linear;
+    }
+
+    /* 하단 바닥 영역 */
+    #floor {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 26%;
+      background-color: #d1d5db;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #floor-text {
+      color: #374151;
+      font-size: 13px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    /* 붕어아이스크림 타깃 박스 */
+    #target-item {
+      position: absolute;
+      bottom: calc(26% - 15px);
+      left: 62%;
+      width: 110px;
+      height: 55px;
+      background-color: #ffe600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      color: #000;
+      transform: translateX(-50%);
+      z-index: 5;
+    }
+
+    /* 크레인 본체 컨테이너 */
+    #claw-rig {
+      position: absolute;
+      top: 0;
+      left: 80px;
+      width: 70px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 10;
+      transform: translateX(-50%);
+    }
+
+    /* 내려오는 줄 */
+    #claw-line {
+      width: 10px;
+      height: 90px;
+      background-color: #6ee7b7;
+    }
+
+    /* 집게 헤드 및 관절 */
+    #claw-head {
+      position: relative;
+      width: 60px;
+      height: 65px;
+    }
+    .claw-arm {
+      position: absolute;
+      top: 0;
+      width: 8px;
+      height: 65px;
+      background-color: #f87171;
+      border-radius: 4px;
+      transition: transform 0.4s ease-in-out;
+    }
+    /* 기본 닫힌 상태 (다이아몬드 실루엣) */
+    .claw-left {
+      left: 20px;
+      transform-origin: top center;
+      transform: rotate(20deg);
+    }
+    .claw-right {
+      right: 20px;
+      transform-origin: top center;
+      transform: rotate(-20deg);
+    }
+
+    /* 벌려진 상태 (내려갈 때 / 잡기 직전) */
+    #claw-head.open .claw-left {
+      transform: rotate(-24deg);
+    }
+    #claw-head.open .claw-right {
+      transform: rotate(24deg);
+    }
+
+    /* 최종 획득 화면 */
+    #success-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 150;
+    }
+    #success-screen.active {
+      display: flex;
+    }
+    #success-screen h1 {
+      font-size: 26px;
+      margin-bottom: 12px;
+      color: #111;
+    }
+    #success-screen p {
+      font-size: 15px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+  <button id="start-btn">뽑기 시작 (센서 활성화)</button>
+
+  <div id="guide-text">폰을 가로로 들고 좌우로 기울여 조준한 뒤 멈추세요</div>
+
+  <!-- 원형 타이머 -->
+  <div id="timer-container">
+    <div id="timer-label">타이머</div>
+    <svg class="progress-svg">
+      <circle class="circle-bg" cx="29" cy="29" r="25" />
+      <circle id="circle-fill" class="circle-fill" cx="29" cy="29" r="25" />
+    </svg>
+  </div>
+
+  <!-- 집게 릭 -->
+  <div id="claw-rig">
+    <div id="claw-line"></div>
+    <div id="claw-head">
+      <div class="claw-arm claw-left"></div>
+      <div class="claw-arm claw-right"></div>
+    </div>
+  </div>
+
+  <!-- 타깃 붕어아이스크림 -->
+  <div id="target-item">붕어아이스크림</div>
+
+  <!-- 바닥 -->
+  <div id="floor">
+    <div id="floor-text">아이스크림들</div>
+  </div>
+
+  <!-- 획득 화면 -->
+  <div id="success-screen">
+    <h1>붕어아이스크림 획득!</h1>
+    <p>차가운 얼음 속에서 물고기가 깨어납니다.</p>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById('start-btn');
+    const guideText = document.getElementById('guide-text');
+    const clawRig = document.getElementById('claw-rig');
+    const clawLine = document.getElementById('claw-line');
+    const clawHead = document.getElementById('claw-head');
+    const circleFill = document.getElementById('circle-fill');
+    const targetItem = document.getElementById('target-item');
+    const successScreen = document.getElementById('success-screen');
+
+    let clawX = window.innerWidth * 0.15;
+    let targetX = clawX;
+    let lastTiltAngle = null;
+    let stillStartTime = null;
+    const HOLD_DURATION = 4000; // 4초 유지
+    const CIRCLE_CIRCUMFERENCE = 157; // 2 * PI * 25
+
+    let isDropping = false;
+    let isFinished = false;
+
+    // 1. 센서 권한 요청 및 이벤트 등록
+    startBtn.addEventListener('click', async () => {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const res = await DeviceOrientationEvent.requestPermission();
+          if (res === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+          } else {
+            alert('기울기 센서 권한이 필요합니다.');
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      } else {
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
+      startBtn.style.display = 'none';
+      requestAnimationFrame(loop);
+    });
+
+    // 2. 가로 모드 기준 센서 감지
+    function handleOrientation(e) {
+      if (isDropping || isFinished) return;
+
+      const orientationAngle = (screen.orientation && screen.orientation.angle !== undefined)
+        ? screen.orientation.angle
+        : (window.orientation || 0);
+
+      const beta = e.beta || 0;   // 앞뒤 기울기
+      const gamma = e.gamma || 0; // 좌우 기울기
+
+      // 가로 모드 파지 방향에 따른 좌우 틸트 축 매핑
+      let currentTilt = 0;
+      if (Math.abs(orientationAngle) === 90 || orientationAngle === 270) {
+        currentTilt = (orientationAngle === 90) ? beta : -beta;
+      } else {
+        // 일반 세로/기타 브라우저 환경 호환
+        currentTilt = gamma;
+      }
+
+      // 민감도: 가로 해상도를 빠르게 가로지를 수 있도록 설정 (약 ±12도 기울임으로 전체 커버)
+      const SENSITIVITY = 22;
+      const screenW = window.innerWidth;
+      
+      targetX = (screenW / 2) + (currentTilt * SENSITIVITY);
+      targetX = Math.max(60, Math.min(screenW - 60, targetX));
+
+      // 가만히 있는 상태 판정 (손떨림 보정 허용 오차 1.5도)
+      if (lastTiltAngle !== null) {
+        const delta = Math.abs(currentTilt - lastTiltAngle);
+        if (delta < 1.5) {
+          if (!stillStartTime) stillStartTime = performance.now();
+        } else {
+          stillStartTime = null;
+          updateProgress(0);
+        }
+      }
+      lastTiltAngle = currentTilt;
+    }
+
+    // 3. 렌더 루프
+    function loop(now) {
+      if (!isDropping && !isFinished) {
+        // 집게 부드러운 감속 이동
+        clawX += (targetX - clawX) * 0.18;
+        clawRig.style.left = `${clawX}px`;
+
+        // 멈춤 4초 누적 검사
+        if (stillStartTime) {
+          const elapsed = now - stillStartTime;
+          const ratio = Math.min(1, elapsed / HOLD_DURATION);
+          updateProgress(ratio);
+
+          if (ratio >= 1) {
+            triggerClawDrop();
+          }
+        }
+      }
+
+      if (!isFinished) {
+        requestAnimationFrame(loop);
+      }
+    }
+
+    function updateProgress(ratio) {
+      const offset = CIRCLE_CIRCUMFERENCE - (CIRCLE_CIRCUMFERENCE * ratio);
+      circleFill.style.strokeDashoffset = offset;
+    }
+
+    // 4. 집게 하강, 포획 및 들어올리기 시퀀스
+    function triggerClawDrop() {
+      isDropping = true;
+      guideText.textContent = "집게가 내려갑니다!";
+      if (navigator.vibrate) navigator.vibrate(60);
+
+      // 집게 벌리며 하강
+      clawHead.classList.add('open');
+
+      const targetRect = targetItem.getBoundingClientRect();
+      const dropDistance = window.innerHeight * 0.74 - 120;
+
+      clawLine.style.transition = "height 1.3s cubic-bezier(0.25, 1, 0.5, 1)";
+      clawLine.style.height = `${dropDistance}px`;
+
+      setTimeout(() => {
+        // 도달 판정: 집게 중심과 붕어아이스크림 중심 간 오차 50px 이내
+        const currentClawCenterX = clawX;
+        const targetCenterX = targetRect.left + (targetRect.width / 2);
+        const isCaught = Math.abs(currentClawCenterX - targetCenterX) <= 50;
+
+        // 집게 오므려서 잡기
+        clawHead.classList.remove('open');
+        if (navigator.vibrate) navigator.vibrate([70, 40, 70]);
+
+        if (isCaught) {
+          targetItem.style.transition = "bottom 1.3s cubic-bezier(0.4, 0, 0.6, 1)";
+          targetItem.style.position = "absolute";
+          targetItem.style.zIndex = "12";
+        }
+
+        // 와이어 감으며 들어올리기
+        setTimeout(() => {
+          clawLine.style.height = "90px";
+          if (isCaught) {
+            targetItem.style.bottom = "calc(100vh - 190px)";
+            targetItem.style.left = `${clawX}px`;
+          }
+
+          // 화면 전환
+          setTimeout(() => {
+            isFinished = true;
+            if (isCaught) {
+              successScreen.classList.add('active');
+            } else {
+              guideText.textContent = "아이스크림을 놓쳤습니다! 다시 조준해보세요.";
+              isDropping = false;
+              stillStartTime = null;
+              updateProgress(0);
+            }
+          }, 1400);
+        }, 500);
+
+      }, 1300);
+    }
+  </script>
+</body>
+</html>
