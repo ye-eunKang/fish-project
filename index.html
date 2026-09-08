@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>LP 수평계 인터랙션</title>
+  <title>붕어아이스크림 뽑기</title>
   <style>
     * {
       box-sizing: border-box;
@@ -18,193 +18,171 @@
       height: 100vh;
       background-color: #ffffff;
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
-    #hud {
+    /* iOS 센서 권한 시작 버튼 */
+    #start-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 100;
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    /* 상단 안내 문구 */
+    #guide-text {
       position: absolute;
       top: 25px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 15px;
+      font-weight: 500;
+      color: #555;
       text-align: center;
       pointer-events: none;
       z-index: 20;
     }
-    #timer-text {
-      font-size: 22px;
-      font-weight: bold;
-      color: #333;
-    }
-    #guide-text {
-      font-size: 14px;
-      color: #888;
-      margin-top: 6px;
-    }
 
-    #start-btn {
+    /* 우측 상단 타이머 원형 프로그레스바 */
+    #timer-container {
       position: absolute;
-      z-index: 50;
-      padding: 12px 24px;
-      font-size: 16px;
-      font-weight: bold;
-      background: #333;
-      color: #fff;
-      border: none;
-      border-radius: 25px;
-      cursor: pointer;
-    }
-
-    /* 좌측 상단 수평계 */
-    #level-wrapper {
-      position: absolute;
-      top: 25px;
-      left: 25px;
-      width: 80px;
-      height: 80px;
+      top: 20px;
+      right: 25px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      z-index: 15;
+      z-index: 20;
     }
-    #level-title {
+    #timer-label {
       font-size: 12px;
       font-weight: bold;
+      color: #111;
       margin-bottom: 4px;
-      color: #333;
     }
-    #spirit-level {
-      position: relative;
-      width: 70px;
-      height: 70px;
-      background-color: #fef08a;
-      border: 2px solid #333;
-      border-radius: 50%;
-      overflow: hidden;
+    .progress-svg {
+      width: 64px;
+      height: 64px;
+      transform: rotate(-90deg); /* 12시 방향부터 채워짐 */
     }
-    .crosshair-h {
+    .circle-bg {
+      fill: none;
+      stroke: #111111;
+      stroke-width: 6;
+    }
+    .circle-fill {
+      fill: none;
+      stroke: #00e575; /* 두 번째 사진의 밝은 초록색 */
+      stroke-width: 6;
+      stroke-dasharray: 176; /* 2 * PI * 28 */
+      stroke-dashoffset: 176;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.05s linear;
+    }
+
+    /* 하단 배경 영역 */
+    #floor {
       position: absolute;
+      bottom: 0;
+      left: 0;
       width: 100%;
-      height: 1px;
-      background: #333;
-      top: 50%;
-      transform: translateY(-50%);
-    }
-    .crosshair-v {
-      position: absolute;
-      height: 100%;
-      width: 1px;
-      background: #333;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-    .circle-guide {
-      position: absolute;
-      border: 1px solid #333;
-      border-radius: 50%;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-    }
-    .circle-guide.mid { width: 44px; height: 44px; }
-    .circle-guide.inner { width: 14px; height: 14px; } /* 아주 좁은 목표 원 */
-
-    #bubble {
-      position: absolute;
-      width: 12px;
-      height: 12px;
-      background: #ffffff;
-      border: 1.5px solid rgba(0,0,0,0.3);
-      border-radius: 50%;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
-
-    /* 턴테이블 베이스 */
-    #turntable {
-      position: relative;
-      width: 340px;
-      height: 290px;
+      height: 28%;
       background-color: #d1d5db;
-      clip-path: polygon(6% 0%, 94% 0%, 100% 100%, 0% 100%);
-      box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #floor-text {
+      color: #374151;
+      font-size: 13px;
+      font-weight: bold;
+      margin-top: 15px;
     }
 
-    /* LP 판 */
-    #platter {
+    /* 붕어아이스크림 타겟 박스 */
+    #target-item {
       position: absolute;
-      left: 30px;
-      top: 35px;
-      width: 220px;
-      height: 220px;
-      background: radial-gradient(circle, #4b5563 0%, #374151 60%, #1f2937 100%);
-      border-radius: 50%;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      bottom: calc(28% - 25px);
+      left: 60%;
+      width: 100px;
+      height: 55px;
+      background-color: #ffe600;
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-    #platter::after {
-      content: '';
-      width: 12px;
-      height: 12px;
-      background: #ffffff;
-      border-radius: 50%;
-    }
-    #platter.spinning {
-      animation: spin 1.8s linear infinite;
-    }
-    @keyframes spin {
-      100% { transform: rotate(360deg); }
+      font-size: 12px;
+      font-weight: bold;
+      color: #000;
+      transform: translateX(-50%);
+      z-index: 5;
     }
 
-    /* 톤암 피봇(회전 고정축 베이스) */
-    #tonearm-base {
+    /* 크레인 기둥 & 집게 컨테이너 */
+    #claw-rig {
       position: absolute;
-      right: 32px;
-      top: 35px;
-      width: 24px;
-      height: 24px;
-      background: #9ca3af;
-      border-radius: 50%;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      top: 0;
+      left: 50px; /* 초기 위치 */
+      width: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       z-index: 10;
+      transform: translateX(-50%);
+      transition: top 0.05s linear;
     }
 
-    /* 회전하는 톤암 본체 */
-    #tonearm {
-      position: absolute;
-      top: 12px; /* 베이스 중심 */
-      left: 7px;
+    /* 내려오는 파란색 줄 */
+    #claw-line {
       width: 10px;
-      height: 195px;
-      transform-origin: 5px 0px; /* 상단 고정 나사 중심을 축으로 회전 */
-      cursor: pointer;
-      transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
-      transform: rotate(0deg); /* 기본 대기 상태 (수직 정렬) */
+      height: 120px;
+      background-color: #6ee7b7;
     }
 
-    .arm-rod {
+    /* 집게 헤드 및 관절 */
+    #claw-head {
+      position: relative;
+      width: 60px;
+      height: 70px;
+    }
+    .claw-arm {
+      position: absolute;
+      top: 0;
       width: 8px;
-      height: 165px;
-      background: #ffffff;
-      margin: 0 auto;
+      height: 70px;
+      background-color: #f87171; /* 핑크빛 관절 */
       border-radius: 4px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: transform 0.4s ease-in-out;
     }
-    .arm-headshell {
-      width: 18px;
-      height: 28px;
-      background: #4b5563;
-      margin: -2px auto 0 auto;
-      border-radius: 2px;
-      transform: rotate(-10deg); /* 헤드쉘이 LP 곡선을 향하도록 꺾음 */
+    /* 닫힌 상태 (다이아몬드 형태) */
+    .claw-left {
+      left: 18px;
+      transform-origin: top center;
+      transform: rotate(20deg);
+    }
+    .claw-right {
+      right: 18px;
+      transform-origin: top center;
+      transform: rotate(-20deg);
     }
 
+    /* 집게 벌려진 상태 (내려갈 때 & 잡을 때) */
+    #claw-head.open .claw-left {
+      transform: rotate(-22deg);
+    }
+    #claw-head.open .claw-right {
+      transform: rotate(22deg);
+    }
+
+    /* 성공 화면 */
     #success-screen {
       position: absolute;
       top: 0;
@@ -216,170 +194,220 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      z-index: 100;
+      z-index: 150;
     }
     #success-screen.active {
       display: flex;
+    }
+    #success-screen h1 {
+      font-size: 26px;
+      margin-bottom: 12px;
+      color: #111;
+    }
+    #success-screen p {
+      font-size: 15px;
+      color: #666;
     }
   </style>
 </head>
 <body>
 
-  <button id="start-btn">인터랙션 시작 (센서 켜기)</button>
+  <button id="start-btn">뽑기 시작 (센서 활성화)</button>
 
-  <div id="hud">
-    <div id="timer-text">수평 유지: 0.0초 / 5.0초</div>
-    <div id="guide-text">톤암을 터치해 LP 판 위로 올리세요</div>
+  <div id="guide-text">폰을 기울여 집게를 옮긴 뒤 멈추세요</div>
+
+  <!-- 타이머 원형 게이지 -->
+  <div id="timer-container">
+    <div id="timer-label">타이머</div>
+    <svg class="progress-svg">
+      <circle class="circle-bg" cx="32" cy="32" r="28" />
+      <circle id="circle-fill" class="circle-fill" cx="32" cy="32" r="28" />
+    </svg>
   </div>
 
-  <div id="level-wrapper">
-    <div id="level-title">수평계</div>
-    <div id="spirit-level">
-      <div class="crosshair-h"></div>
-      <div class="crosshair-v"></div>
-      <div class="circle-guide mid"></div>
-      <div class="circle-guide inner"></div>
-      <div id="bubble"></div>
+  <!-- 집게 릭 -->
+  <div id="claw-rig">
+    <div id="claw-line"></div>
+    <div id="claw-head">
+      <div class="claw-arm claw-left"></div>
+      <div class="claw-arm claw-right"></div>
     </div>
   </div>
 
-  <div id="turntable">
-    <div id="platter"></div>
-    
-    <!-- 톤암 구조 -->
-    <div id="tonearm-base">
-      <div id="tonearm">
-        <div class="arm-rod"></div>
-        <div class="arm-headshell"></div>
-      </div>
-    </div>
+  <!-- 타겟 아이템 -->
+  <div id="target-item">붕어아이스크림</div>
+
+  <!-- 바닥 -->
+  <div id="floor">
+    <div id="floor-text">아이스크림들</div>
   </div>
 
+  <!-- 결과 화면 -->
   <div id="success-screen">
-    <h2>LP가 온전히 재생됩니다!</h2>
-    <p>도루묵이 수족관으로 유영합니다.</p>
+    <h1>붕어아이스크림 획득!</h1>
+    <p>차가운 아이스크림 속에 숨은 물고기가 드러납니다.</p>
   </div>
 
   <script>
-    let isArmOnPlatter = false;
-    let isLevel = false;
-    let holdStartTime = null;
-    let holdDuration = 0;
-    const TARGET_TIME = 5000;
-    let animationFrameId = null;
-
     const startBtn = document.getElementById('start-btn');
-    const bubble = document.getElementById('bubble');
-    const tonearm = document.getElementById('tonearm');
-    const platter = document.getElementById('platter');
-    const timerText = document.getElementById('timer-text');
     const guideText = document.getElementById('guide-text');
+    const clawRig = document.getElementById('claw-rig');
+    const clawLine = document.getElementById('claw-line');
+    const clawHead = document.getElementById('claw-head');
+    const circleFill = document.getElementById('circle-fill');
+    const targetItem = document.getElementById('target-item');
     const successScreen = document.getElementById('success-screen');
 
+    let clawX = window.innerWidth * 0.15;
+    let targetX = clawX;
+    let lastGamma = null;
+    let stillStartTime = null;
+    const HOLD_DURATION = 4000; // 4초 멈춤 판정
+    const CIRCLE_CIRCUMFERENCE = 176;
+
+    let isDropping = false;
+    let isFinished = false;
+
+    // 1. 센서 권한 활성화
     startBtn.addEventListener('click', async () => {
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
-          const response = await DeviceOrientationEvent.requestPermission();
-          if (response === 'granted') {
+          const res = await DeviceOrientationEvent.requestPermission();
+          if (res === 'granted') {
             window.addEventListener('deviceorientation', handleOrientation);
           } else {
-            alert('자이로 센서 접근 권한이 필요합니다.');
+            alert('기울기 센서 권한이 필요합니다.');
           }
-        } catch (e) {
-          console.error(e);
+        } catch (err) {
+          console.error(err);
         }
       } else {
         window.addEventListener('deviceorientation', handleOrientation);
       }
       startBtn.style.display = 'none';
-      requestAnimationFrame(gameLoop);
+      requestAnimationFrame(loop);
     });
 
-    // 톤암 터치/클릭 시: 반시계 음수 각도(-32deg)로 회전해 명확히 왼쪽 LP 판 위로 이동
-    tonearm.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      if (holdDuration >= TARGET_TIME) return;
-
-      if (!isArmOnPlatter) {
-        // 왼쪽으로 32도 회전 (LP 판 트랙 위 안착)
-        tonearm.style.transform = 'rotate(-32deg)';
-        isArmOnPlatter = true;
-        guideText.textContent = "핸드폰을 미세하게 기울여 중앙 원을 맞추세요";
-      } else {
-        // 오른쪽 원래 거치대 위치(0도)로 복귀
-        tonearm.style.transform = 'rotate(0deg)';
-        isArmOnPlatter = false;
-        resetHold();
-        guideText.textContent = "톤암을 터치해 LP 판 위로 올리세요";
-      }
-    });
-
+    // 2. 폰 기울기 감지 (좌우 민감하게 반응)
     function handleOrientation(e) {
-      let beta = e.beta || 0;
-      let gamma = e.gamma || 0;
+      if (isDropping || isFinished) return;
 
-      const maxRadius = 28;
-      // 높은 민감도: 미세한 손떨림도 크게 반영
-      const sensitivity = 5.0; 
+      const gamma = e.gamma || 0; // 좌우 롤 (-90 ~ 90)
 
-      let x = gamma * sensitivity;
-      let y = beta * sensitivity;
+      // 민감도 높임: 작은 기울기에도 넓은 폭으로 이동
+      const SENSITIVITY = 12;
+      const screenW = window.innerWidth;
+      
+      // 화면 중앙을 0도로 기준 잡아 매핑
+      targetX = (screenW / 2) + (gamma * SENSITIVITY);
+      targetX = Math.max(50, Math.min(screenW - 50, targetX)); // 화면 밖 이탈 방지
 
-      const dist = Math.hypot(x, y);
-      if (dist > maxRadius) {
-        x = (x / dist) * maxRadius;
-        y = (y / dist) * maxRadius;
-      }
-
-      bubble.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-
-      // 엄격한 판정 반경 (3.5px 이내에 들어와야 인정)
-      if (dist <= 3.5) {
-        isLevel = true;
-        bubble.style.borderColor = "#22c55e";
-      } else {
-        isLevel = false;
-        bubble.style.borderColor = "rgba(0,0,0,0.3)";
-      }
-    }
-
-    function gameLoop(timestamp) {
-      if (holdDuration >= TARGET_TIME) return;
-
-      if (isArmOnPlatter && isLevel) {
-        if (!holdStartTime) holdStartTime = timestamp;
-        holdDuration = timestamp - holdStartTime;
-
-        let seconds = (holdDuration / 1000).toFixed(1);
-        timerText.textContent = `수평 유지: ${seconds}초 / 5.0초`;
-        timerText.style.color = "#2563eb";
-
-        if (holdDuration >= TARGET_TIME) {
-          triggerSuccess();
-          return;
+      // '가만히 있는 상태' 판정: 
+      // 이전 기울기와의 변화량이 일정 기준(1.2도) 미만이면 가만히 있는 것으로 인정 (안정적인 범위)
+      if (lastGamma !== null) {
+        const delta = Math.abs(gamma - lastGamma);
+        if (delta < 1.2) {
+          if (!stillStartTime) stillStartTime = performance.now();
+        } else {
+          // 손이 크게 흔들리면 타이머 리셋
+          stillStartTime = null;
+          updateProgress(0);
         }
-      } else {
-        resetHold();
+      }
+      lastGamma = gamma;
+    }
+
+    // 3. 메인 인터랙션 루프
+    function loop(now) {
+      if (!isDropping && !isFinished) {
+        // 집게 위치 부드럽게 보간 이동
+        clawX += (targetX - clawX) * 0.15;
+        clawRig.style.left = `${clawX}px`;
+
+        // 멈춤 지속 시간 체크 (4초)
+        if (stillStartTime) {
+          const elapsed = now - stillStartTime;
+          const ratio = Math.min(1, elapsed / HOLD_DURATION);
+          updateProgress(ratio);
+
+          if (ratio >= 1) {
+            triggerClawDrop();
+          }
+        }
       }
 
-      animationFrameId = requestAnimationFrame(gameLoop);
+      if (!isFinished) {
+        requestAnimationFrame(loop);
+      }
     }
 
-    function resetHold() {
-      holdStartTime = null;
-      holdDuration = 0;
-      timerText.textContent = `수평 유지: 0.0초 / 5.0초`;
-      timerText.style.color = "#333";
+    // 원형 프로그레스바 채우기
+    function updateProgress(ratio) {
+      const offset = CIRCLE_CIRCUMFERENCE - (CIRCLE_CIRCUMFERENCE * ratio);
+      circleFill.style.strokeDashoffset = offset;
     }
 
-    function triggerSuccess() {
-      if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
-      platter.classList.add('spinning');
-      guideText.textContent = "성공!";
+    // 4. 집게 하강 및 아이템 낚아채기
+    function triggerClawDrop() {
+      isDropping = true;
+      guideText.textContent = "집게가 내려갑니다!";
+      if (navigator.vibrate) navigator.vibrate(60);
+
+      // 집게를 벌리면서 내려감
+      clawHead.classList.add('open');
+
+      const targetRect = targetItem.getBoundingClientRect();
+      const clawRect = clawHead.getBoundingClientRect();
+      
+      // 하강 목표 높이 계산 (노란색 박스 높이까지 줄을 늘림)
+      const floorTop = window.innerHeight * 0.72;
+      const dropDistance = floorTop - 150;
+
+      clawLine.style.transition = "height 1.4s cubic-bezier(0.25, 1, 0.5, 1)";
+      clawLine.style.height = `${dropDistance}px`;
 
       setTimeout(() => {
-        successScreen.classList.add('active');
-      }, 1200);
+        // 도달 후: 집게가 붕어아이스크림 범위 내에 들어왔는지 판정 (중심 X축 기준 오차 45px 이내)
+        const currentClawCenterX = clawX;
+        const targetCenterX = targetRect.left + (targetRect.width / 2);
+        const isCaught = Math.abs(currentClawCenterX - targetCenterX) <= 45;
+
+        // 집게 오므려서 잡기
+        clawHead.classList.remove('open');
+        if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+
+        if (isCaught) {
+          // 아이템이 집게에 고정되어 함께 들려 올라감
+          targetItem.style.transition = "bottom 1.4s cubic-bezier(0.5, 0, 0.75, 1)";
+          targetItem.style.position = "absolute";
+          targetItem.style.zIndex = "12";
+        }
+
+        // 다시 위로 들어올리기
+        setTimeout(() => {
+          clawLine.style.height = "120px";
+          if (isCaught) {
+            // 아이템도 같이 올라감
+            targetItem.style.bottom = "calc(100vh - 220px)";
+            targetItem.style.left = `${clawX}px`;
+          }
+
+          // 올라간 뒤 화면 전환
+          setTimeout(() => {
+            isFinished = true;
+            if (isCaught) {
+              successScreen.classList.add('active');
+            } else {
+              // 빗나갔을 경우 다시 기회 제공
+              guideText.textContent = "아이스크림을 놓쳤습니다! 다시 조준해보세요.";
+              isDropping = false;
+              stillStartTime = null;
+              updateProgress(0);
+            }
+          }, 1500);
+        }, 600);
+
+      }, 1400);
     }
   </script>
 </body>
