@@ -27,7 +27,7 @@
 
     #hud {
       position: absolute;
-      top: 30px;
+      top: 25px;
       text-align: center;
       pointer-events: none;
       z-index: 20;
@@ -109,7 +109,7 @@
       pointer-events: none;
     }
     .circle-guide.mid { width: 44px; height: 44px; }
-    .circle-guide.inner { width: 16px; height: 16px; } /* 가장 안쪽 목표 원 축소 */
+    .circle-guide.inner { width: 14px; height: 14px; } /* 아주 좁은 목표 원 */
 
     #bubble {
       position: absolute;
@@ -124,22 +124,21 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
 
-    /* 턴테이블 본체 */
+    /* 턴테이블 베이스 */
     #turntable {
       position: relative;
-      width: 330px;
+      width: 340px;
       height: 290px;
       background-color: #d1d5db;
-      clip-path: polygon(8% 0%, 92% 0%, 100% 100%, 0% 100%);
+      clip-path: polygon(6% 0%, 94% 0%, 100% 100%, 0% 100%);
       box-shadow: 0 15px 30px rgba(0,0,0,0.15);
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
+    /* LP 판 */
     #platter {
       position: absolute;
-      left: 35px;
+      left: 30px;
+      top: 35px;
       width: 220px;
       height: 220px;
       background: radial-gradient(circle, #4b5563 0%, #374151 60%, #1f2937 100%);
@@ -148,7 +147,6 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transform-origin: center center;
     }
     #platter::after {
       content: '';
@@ -164,36 +162,47 @@
       100% { transform: rotate(360deg); }
     }
 
-    /* 톤암: 회전축을 상단 중심으로 두고 왼쪽(반시계) 회전 설정 */
-    #tonearm-anchor {
+    /* 톤암 피봇(회전 고정축 베이스) */
+    #tonearm-base {
       position: absolute;
       right: 32px;
       top: 35px;
-      width: 30px;
-      height: 220px;
-      transform-origin: top center;
-      cursor: grab;
+      width: 24px;
+      height: 24px;
+      background: #9ca3af;
+      border-radius: 50%;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
       z-index: 10;
-      transform: rotate(0deg);
-      transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
     }
-    #tonearm-anchor:active {
-      cursor: grabbing;
+
+    /* 회전하는 톤암 본체 */
+    #tonearm {
+      position: absolute;
+      top: 12px; /* 베이스 중심 */
+      left: 7px;
+      width: 10px;
+      height: 195px;
+      transform-origin: 5px 0px; /* 상단 고정 나사 중심을 축으로 회전 */
+      cursor: pointer;
+      transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+      transform: rotate(0deg); /* 기본 대기 상태 (수직 정렬) */
     }
-    .arm-bar {
+
+    .arm-rod {
       width: 8px;
-      height: 180px;
+      height: 165px;
       background: #ffffff;
       margin: 0 auto;
       border-radius: 4px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
-    .arm-cartridge {
-      width: 20px;
+    .arm-headshell {
+      width: 18px;
       height: 28px;
       background: #4b5563;
-      margin: 0 auto;
+      margin: -2px auto 0 auto;
       border-radius: 2px;
+      transform: rotate(-10deg); /* 헤드쉘이 LP 곡선을 향하도록 꺾음 */
     }
 
     #success-screen {
@@ -220,7 +229,7 @@
 
   <div id="hud">
     <div id="timer-text">수평 유지: 0.0초 / 5.0초</div>
-    <div id="guide-text">톤암을 LP 쪽으로 올려놓으세요</div>
+    <div id="guide-text">톤암을 터치해 LP 판 위로 올리세요</div>
   </div>
 
   <div id="level-wrapper">
@@ -236,9 +245,13 @@
 
   <div id="turntable">
     <div id="platter"></div>
-    <div id="tonearm-anchor">
-      <div class="arm-bar"></div>
-      <div class="arm-cartridge"></div>
+    
+    <!-- 톤암 구조 -->
+    <div id="tonearm-base">
+      <div id="tonearm">
+        <div class="arm-rod"></div>
+        <div class="arm-headshell"></div>
+      </div>
     </div>
   </div>
 
@@ -257,7 +270,7 @@
 
     const startBtn = document.getElementById('start-btn');
     const bubble = document.getElementById('bubble');
-    const tonearm = document.getElementById('tonearm-anchor');
+    const tonearm = document.getElementById('tonearm');
     const platter = document.getElementById('platter');
     const timerText = document.getElementById('timer-text');
     const guideText = document.getElementById('guide-text');
@@ -270,7 +283,7 @@
           if (response === 'granted') {
             window.addEventListener('deviceorientation', handleOrientation);
           } else {
-            alert('자이로 센서 접근 권한이 거부되었습니다.');
+            alert('자이로 센서 접근 권한이 필요합니다.');
           }
         } catch (e) {
           console.error(e);
@@ -282,30 +295,32 @@
       requestAnimationFrame(gameLoop);
     });
 
-    // 톤암 조작: 클릭 시 왼쪽(반시계 -28도)으로 이동해 LP 판 위에 안착
-    tonearm.addEventListener('pointerdown', () => {
+    // 톤암 터치/클릭 시: 반시계 음수 각도(-32deg)로 회전해 명확히 왼쪽 LP 판 위로 이동
+    tonearm.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
       if (holdDuration >= TARGET_TIME) return;
-      
+
       if (!isArmOnPlatter) {
-        tonearm.style.transform = 'rotate(-28deg)'; // 왼쪽 바이닐 쪽으로 회전
+        // 왼쪽으로 32도 회전 (LP 판 트랙 위 안착)
+        tonearm.style.transform = 'rotate(-32deg)';
         isArmOnPlatter = true;
         guideText.textContent = "핸드폰을 미세하게 기울여 중앙 원을 맞추세요";
       } else {
-        tonearm.style.transform = 'rotate(0deg)'; // 제자리 복귀
+        // 오른쪽 원래 거치대 위치(0도)로 복귀
+        tonearm.style.transform = 'rotate(0deg)';
         isArmOnPlatter = false;
         resetHold();
-        guideText.textContent = "톤암을 LP 쪽으로 올려놓으세요";
+        guideText.textContent = "톤암을 터치해 LP 판 위로 올리세요";
       }
     });
 
     function handleOrientation(e) {
-      let beta = e.beta || 0;   // 앞뒤 기울기
-      let gamma = e.gamma || 0; // 좌우 기울기
+      let beta = e.beta || 0;
+      let gamma = e.gamma || 0;
 
       const maxRadius = 28;
-      
-      // 감도를 1.8 -> 4.5로 대폭 상향 (작은 손떨림에도 기포가 크게 요동침)
-      const sensitivity = 4.5; 
+      // 높은 민감도: 미세한 손떨림도 크게 반영
+      const sensitivity = 5.0; 
 
       let x = gamma * sensitivity;
       let y = beta * sensitivity;
@@ -318,8 +333,8 @@
 
       bubble.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
 
-      // 가장 안쪽 원 기준 반경을 10 -> 4.5로 대폭 축소 (손을 완전히 멈추어야만 통과)
-      if (dist <= 4.5) {
+      // 엄격한 판정 반경 (3.5px 이내에 들어와야 인정)
+      if (dist <= 3.5) {
         isLevel = true;
         bubble.style.borderColor = "#22c55e";
       } else {
@@ -364,7 +379,6 @@
 
       setTimeout(() => {
         successScreen.classList.add('active');
-        console.log("LP Platter Level Achieved - Emit Socket Event");
       }, 1200);
     }
   </script>
