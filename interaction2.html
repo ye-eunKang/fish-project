@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LP 수평계 인터랙션</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: #ffffff;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    #hud {
+      position: absolute;
+      top: 30px;
+      text-align: center;
+      pointer-events: none;
+      z-index: 20;
+    }
+    #timer-text {
+      font-size: 22px;
+      font-weight: bold;
+      color: #333;
+    }
+    #guide-text {
+      font-size: 14px;
+      color: #888;
+      margin-top: 6px;
+    }
+
+    /* iOS 센서 권한 시작 버튼 (최초 1회 터치 필요) */
+    #start-btn {
+      position: absolute;
+      z-index: 50;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: bold;
+      background: #333;
+      color: #fff;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+    }
+
+    /* 좌측 상단 수평계 (사진 5 기준 노란 원) */
+    #level-wrapper {
+      position: absolute;
+      top: 25px;
+      left: 25px;
+      width: 80px;
+      height: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 15;
+    }
+    #level-title {
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 4px;
+      color: #333;
+    }
+    #spirit-level {
+      position: relative;
+      width: 70px;
+      height: 70px;
+      background-color: #fef08a;
+      border: 2px solid #333;
+      border-radius: 50%;
+      overflow: hidden;
+    }
+    /* 십자선 */
+    .crosshair-h {
+      position: absolute;
+      width: 100%;
+      height: 1px;
+      background: #333;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    .crosshair-v {
+      position: absolute;
+      height: 100%;
+      width: 1px;
+      background: #333;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    /* 동심원 가이드 */
+    .circle-guide {
+      position: absolute;
+      border: 1px solid #333;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .circle-guide.mid { width: 44px; height: 44px; }
+    .circle-guide.inner { width: 22px; height: 22px; }
+
+    /* 움직이는 흰색 기포 */
+    #bubble {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: #ffffff;
+      border: 1.5px solid rgba(0,0,0,0.3);
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      transition: transform 0.05s ease-out;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    /* 턴테이블 본체 */
+    #turntable {
+      position: relative;
+      width: 330px;
+      height: 290px;
+      background-color: #d1d5db;
+      clip-path: polygon(8% 0%, 92% 0%, 100% 100%, 0% 100%);
+      box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* LP 바이닐 판 */
+    #platter {
+      position: absolute;
+      left: 35px;
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle, #4b5563 0%, #374151 60%, #1f2937 100%);
+      border-radius: 50%;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: center center;
+    }
+    #platter::after {
+      content: '';
+      width: 12px;
+      height: 12px;
+      background: #ffffff;
+      border-radius: 50%;
+    }
+    #platter.spinning {
+      animation: spin 1.8s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    /* 톤암 (드래그 회전) */
+    #tonearm-anchor {
+      position: absolute;
+      right: 32px;
+      top: 30px;
+      width: 30px;
+      height: 220px;
+      transform-origin: top center;
+      cursor: grab;
+      z-index: 10;
+      transform: rotate(0deg);
+      transition: transform 0.15s ease-out;
+    }
+    #tonearm-anchor:active {
+      cursor: grabbing;
+    }
+    .arm-bar {
+      width: 8px;
+      height: 180px;
+      background: #ffffff;
+      margin: 0 auto;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .arm-cartridge {
+      width: 20px;
+      height: 28px;
+      background: #4b5563;
+      margin: 0 auto;
+      border-radius: 2px;
+    }
+
+    /* 완료 화면 */
+    #success-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #success-screen.active {
+      display: flex;
+    }
+  </style>
+</head>
+<body>
+
+  <button id="start-btn">인터랙션 시작 (센서 켜기)</button>
+
+  <div id="hud">
+    <div id="timer-text">수평 유지: 0.0초 / 5.0초</div>
+    <div id="guide-text">톤암을 올려놓고 수평을 맞추세요</div>
+  </div>
+
+  <!-- 수평계 -->
+  <div id="level-wrapper">
+    <div id="level-title">수평계</div>
+    <div id="spirit-level">
+      <div class="crosshair-h"></div>
+      <div class="crosshair-v"></div>
+      <div class="circle-guide mid"></div>
+      <div class="circle-guide inner"></div>
+      <div id="bubble"></div>
+    </div>
+  </div>
+
+  <!-- 턴테이블 본체 -->
+  <div id="turntable">
+    <div id="platter"></div>
+    <div id="tonearm-anchor">
+      <div class="arm-bar"></div>
+      <div class="arm-cartridge"></div>
+    </div>
+  </div>
+
+  <!-- 성공 화면 -->
+  <div id="success-screen">
+    <h2>LP가 온전히 재생됩니다!</h2>
+    <p>도루묵이 수족관으로 유영합니다.</p>
+  </div>
+
+  <script>
+    let isArmOnPlatter = false;
+    let isLevel = false;
+    let holdStartTime = null;
+    let holdDuration = 0;
+    const TARGET_TIME = 5000; // 5초
+    let animationFrameId = null;
+
+    const startBtn = document.getElementById('start-btn');
+    const bubble = document.getElementById('bubble');
+    const tonearm = document.getElementById('tonearm-anchor');
+    const platter = document.getElementById('platter');
+    const timerText = document.getElementById('timer-text');
+    const guideText = document.getElementById('guide-text');
+    const successScreen = document.getElementById('success-screen');
+
+    // 1. 센서 권한 요청 및 이벤트 바인딩
+    startBtn.addEventListener('click', async () => {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const response = await DeviceOrientationEvent.requestPermission();
+          if (response === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+          } else {
+            alert('자이로 센서 접근 권한이 거부되었습니다.');
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        // 안드로이드 및 일반 데스크톱 브라우저
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
+      startBtn.style.display = 'none';
+      requestAnimationFrame(gameLoop);
+    });
+
+    // 2. 톤암 인터랙션 (탭하거나 살짝 드래그 시 LP 위로 이동)
+    let armAngle = 0;
+    tonearm.addEventListener('pointerdown', () => {
+      if (holdDuration >= TARGET_TIME) return;
+      
+      // 톤암 토글 (0도: 거치대 / -25도: LP판 위)
+      if (!isArmOnPlatter) {
+        armAngle = -25;
+        isArmOnPlatter = true;
+        guideText.textContent = "이제 핸드폰을 평평하게 들어 수평을 맞추세요";
+      } else {
+        armAngle = 0;
+        isArmOnPlatter = false;
+        resetHold();
+        guideText.textContent = "톤암을 LP 쪽으로 올려놓으세요";
+      }
+      tonearm.style.transform = `rotate(${armAngle}deg)`;
+    });
+
+    // 3. 자이로 센서 데이터 파싱
+    function handleOrientation(e) {
+      let beta = e.beta || 0;   // 앞뒤 기울기 (-180 ~ 180)
+      let gamma = e.gamma || 0; // 좌우 기울기 (-90 ~ 90)
+
+      // 감도 및 이동 한계 설정 (수평계 반경 내 제한)
+      const maxRadius = 26; 
+      const sensitivity = 1.8;
+
+      let x = gamma * sensitivity;
+      let y = beta * sensitivity;
+
+      const dist = Math.hypot(x, y);
+      if (dist > maxRadius) {
+        x = (x / dist) * maxRadius;
+        y = (y / dist) * maxRadius;
+      }
+
+      // 기포 위치 업데이트
+      bubble.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+
+      // 가장 안쪽 원 반경(약 10px 이내)에 들어왔는지 판정
+      if (dist <= 10) {
+        isLevel = true;
+        bubble.style.borderColor = "#22c55e"; // 안쪽 원 안착 시 녹색 테두리
+      } else {
+        isLevel = false;
+        bubble.style.borderColor = "rgba(0,0,0,0.3)";
+      }
+    }
+
+    // 4. 수평 유지 5초 타이머 루프
+    function gameLoop(timestamp) {
+      if (holdDuration >= TARGET_TIME) return;
+
+      if (isArmOnPlatter && isLevel) {
+        if (!holdStartTime) holdStartTime = timestamp;
+        holdDuration = timestamp - holdStartTime;
+
+        let seconds = (holdDuration / 1000).toFixed(1);
+        timerText.textContent = `수평 유지: ${seconds}초 / 5.0초`;
+        timerText.style.color = "#2563eb";
+
+        if (holdDuration >= TARGET_TIME) {
+          triggerSuccess();
+          return;
+        }
+      } else {
+        resetHold();
+      }
+
+      animationFrameId = requestAnimationFrame(gameLoop);
+    }
+
+    function resetHold() {
+      holdStartTime = null;
+      holdDuration = 0;
+      timerText.textContent = `수평 유지: 0.0초 / 5.0초`;
+      timerText.style.color = "#333";
+    }
+
+    function triggerSuccess() {
+      if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
+      platter.classList.add('spinning');
+      guideText.textContent = "성공!";
+
+      setTimeout(() => {
+        successScreen.classList.add('active');
+        console.log("LP Platter Level Achieved - Emit Socket Event");
+      }, 1200);
+    }
+  </script>
+</body>
+</html>
