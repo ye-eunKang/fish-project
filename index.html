@@ -25,22 +25,7 @@
       justify-content: center;
     }
 
-    /* 시작 버튼 (iOS 센서 권한 허용용) */
-    #start-btn {
-      position: absolute;
-      z-index: 100;
-      padding: 14px 28px;
-      font-size: 16px;
-      font-weight: bold;
-      background: #111;
-      color: #fff;
-      border: none;
-      border-radius: 30px;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-
-    /* 1번 사진: 초기 안내 박스 */
+    /* 1번 사진: 초기 안내 박스 (시작 버튼 없이 바로 표시) */
     #intro-box {
       background-color: #e5e7eb;
       color: #111827;
@@ -51,6 +36,7 @@
       text-align: center;
       box-shadow: 0 2px 6px rgba(0,0,0,0.05);
       animation: pulse 1.6s infinite;
+      cursor: pointer;
     }
     @keyframes pulse {
       0%, 100% { transform: scale(1); }
@@ -84,7 +70,7 @@
       box-shadow: 0 4px 15px rgba(0,0,0,0.06);
     }
 
-    /* 거래하기 버튼 (우측 정렬) */
+    /* 거래하기 버튼 (우측 상단 배치) */
     #trade-action-wrapper {
       width: 100%;
       display: flex;
@@ -162,9 +148,7 @@
 </head>
 <body>
 
-  <button id="start-btn">거래 시작 (센서 활성화)</button>
-
-  <!-- 1번 화면: 최초 안내 박스 -->
+  <!-- 1번 화면: 처음 접속 시 바로 표시되는 안내 박스 -->
   <div id="intro-box">
     폰을 흔들어 교환할 물건을 꺼내보세요
   </div>
@@ -182,11 +166,10 @@
   <div id="result-screen">
     <div id="result-title"></div>
     <div id="result-desc"></div>
-    <button id="retry-btn">다시 흔들기</button>
+    <button id="retry-btn">다시 시도하기</button>
   </div>
 
   <script>
-    // 아이템 데이터 정의 (1, 2는 실패 / 3은 성공)
     const items = [
       {
         id: 1,
@@ -216,14 +199,16 @@
 
     let currentItemIndex = null;
     let isTradeLocked = false;
-    let hasStarted = false;
+    let isSensorActive = false;
 
-    // 가속도 센서 변수
-    let lastX = null, lastY = null, lastZ = null;
-    let lastShakeTime = 0;
-    const SHAKE_THRESHOLD = 16; // 흔들기 감도
+    // 기울기(Orientation) 감지 변수
+    let lastBeta = null;
+    let lastGamma = null;
+    let lastChangeTime = 0;
+    
+    // 기울기 변화 임계치 (손목을 휙 꺾는 속도/각도 감지)
+    const TILT_SPEED_THRESHOLD = 32;
 
-    const startBtn = document.getElementById('start-btn');
     const introBox = document.getElementById('intro-box');
     const tradeContainer = document.getElementById('trade-container');
     const itemCircle = document.getElementById('item-circle');
@@ -234,71 +219,75 @@
     const resultDesc = document.getElementById('result-desc');
     const retryBtn = document.getElementById('retry-btn');
 
-    // 1. 센서 권한 허용 및 리스너 등록
-    startBtn.addEventListener('click', async () => {
-      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    // 1. 센서 자동 등록 함수
+    async function initOrientation() {
+      if (isSensorActive) return;
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
-          const res = await DeviceMotionEvent.requestPermission();
+          const res = await DeviceOrientationEvent.requestPermission();
           if (res === 'granted') {
-            window.addEventListener('devicemotion', handleMotion);
-          } else {
-            alert('모션 센서 권한이 필요합니다.');
+            window.addEventListener('deviceorientation', handleOrientation);
+            isSensorActive = true;
           }
         } catch (e) {
-          console.error(e);
+          console.warn("Permission rejected or waiting for user gesture:", e);
         }
       } else {
-        window.addEventListener('devicemotion', handleMotion);
+        window.addEventListener('deviceorientation', handleOrientation);
+        isSensorActive = true;
       }
-      startBtn.style.display = 'none';
-      hasStarted = true;
-      vibrateStrong('tap'); // 시작 터치 피드백
+    }
+
+    // 페이지 로드 시 즉시 센서 등록 시도
+    window.addEventListener('DOMContentLoaded', initOrientation);
+
+    // iOS 등 첫 사용자 제스처가 필요한 환경 대비 (화면 터치 시 즉시 권한 승인 및 백업 트리거)
+    window.addEventListener('pointerdown', (e) => {
+      initOrientation();
+      // 거래하기/재시도 버튼 터치가 아닐 때 터치로도 랜덤 전환 가능
+      if (!isTradeLocked && e.target !== tradeBtn && e.target !== retryBtn) {
+        changeRandomItem();
+      }
     });
 
-    // 화면 터치로도 흔들기 기능 트리거 (PC 및 터치 겸용)
-    window.addEventListener('click', (e) => {
-      if (!hasStarted || isTradeLocked || e.target === tradeBtn || e.target === retryBtn) return;
-      onDeviceShaken();
-    });
+    // 2. 기울기(DeviceOrientation) 변화 감지 로직
+    function handleOrientation(e) {
+      if (isTradeLocked) return;
 
-    // 2. 가속도 감지 (흔들림 포착)
-    function handleMotion(e) {
-      if (!hasStarted || isTradeLocked) return;
-
-      const acc = e.accelerationIncludingGravity || e.acceleration;
-      if (!acc) return;
-
+      const beta = e.beta || 0;   // 앞뒤 기울기 (-180 ~ 180)
+      const gamma = e.gamma || 0; // 좌우 기울기 (-90 ~ 90)
       const now = performance.now();
-      if (now - lastShakeTime < 500) return; // 0.5초 쿨다운
 
-      if (lastX !== null) {
-        const deltaX = Math.abs(acc.x - lastX);
-        const deltaY = Math.abs(acc.y - lastY);
-        const deltaZ = Math.abs(acc.z - lastZ);
+      if (now - lastChangeTime < 600) return; // 연속 변경 방지 (0.6초 쿨타임)
 
-        if (deltaX + deltaY + deltaZ > SHAKE_THRESHOLD) {
-          lastShakeTime = now;
-          onDeviceShaken();
+      if (lastBeta !== null && lastGamma !== null) {
+        const deltaBeta = Math.abs(beta - lastBeta);
+        const deltaGamma = Math.abs(gamma - lastGamma);
+        const totalDelta = deltaBeta + deltaGamma;
+
+        // 폰을 특정 방향으로 휙 젖혔을 때 아이템 교체
+        if (totalDelta > TILT_SPEED_THRESHOLD) {
+          lastChangeTime = now;
+          changeRandomItem();
         }
       }
 
-      lastX = acc.x;
-      lastY = acc.y;
-      lastZ = acc.z;
+      lastBeta = beta;
+      lastGamma = gamma;
     }
 
-    // 3. 기기를 흔들었을 때 실행 (아이템 랜덤 교체 & 강한 햅틱)
-    function onDeviceShaken() {
-      // 흔들릴 때 덜컹거리는 묵직한 더블 임팩트 진동
-      vibrateStrong('shake');
+    // 3. 랜덤 아이템 교체 및 강한 햅틱 진동
+    function changeRandomItem() {
+      vibrateStrong('tilt');
 
-      // 1번 안내문 숨기고 아이템 UI 표시
+      // 첫 반응 시 1번 안내문 숨기고 아이템 UI 노출
       if (introBox.style.display !== 'none') {
         introBox.style.display = 'none';
         tradeContainer.style.display = 'flex';
       }
 
-      // 이전 아이템과 중복되지 않게 랜덤 선택
+      // 이전 아이템과 겹치지 않게 변경
       let nextIndex;
       do {
         nextIndex = Math.floor(Math.random() * items.length);
@@ -308,34 +297,34 @@
       renderItem(items[currentItemIndex]);
     }
 
-    // 아이템 정보 렌더링
     function renderItem(item) {
       itemCircle.style.transform = 'scale(0.85)';
       setTimeout(() => {
         itemCircle.textContent = item.title;
         itemCircle.style.backgroundColor = item.color;
         itemCircle.style.transform = 'scale(1)';
-      }, 100);
+      }, 90);
 
       descBox.innerHTML = item.desc;
     }
 
     // 4. '거래하기' 버튼 클릭 처리
-    tradeBtn.addEventListener('click', () => {
+    tradeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (currentItemIndex === null || isTradeLocked) return;
       isTradeLocked = true;
 
       const currentItem = items[currentItemIndex];
 
       if (currentItem.isSuccess) {
-        // [랜덤 3]: 성공 진동 (빠른 리듬의 축하 3단 펄스)
+        // [랜덤 3]: 성공 진동 (빠른 리듬 3단 펄스)
         vibrateStrong('success');
         resultTitle.textContent = "거래 성사!";
         resultTitle.style.color = "#16a34a";
         resultDesc.innerHTML = currentItem.successMessage;
         retryBtn.style.display = 'none';
       } else {
-        // [랜덤 1, 2]: 실패 진동 (묵직하고 긴 단일 저음 진동)
+        // [랜덤 1, 2]: 실패 진동 (묵직한 단일 진동)
         vibrateStrong('fail');
         resultTitle.textContent = "거래 실패...";
         resultTitle.style.color = "#dc2626";
@@ -346,25 +335,26 @@
       resultScreen.classList.add('active');
     });
 
-    // 실패 후 다시 흔들기
-    retryBtn.addEventListener('click', () => {
+    // 실패 후 다시 시도
+    retryBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       resultScreen.classList.remove('active');
       isTradeLocked = false;
-      onDeviceShaken();
+      changeRandomItem();
     });
 
-    // 5. 체감 강도를 높인 햅틱 진동 함수
+    // 5. 체감 강도를 높인 햅틱 진동 패턴
     function vibrateStrong(pattern) {
       if (!navigator.vibrate) return;
 
-      if (pattern === 'shake') {
-        // 흔들 때: 주머니에서 물건이 덜컹 떨어지는 묵직한 2단 타격 (120ms 진동 - 40ms 쉼 - 180ms 진동)
-        navigator.vibrate([120, 40, 180]);
+      if (pattern === 'tilt') {
+        // 폰을 휙 기울일 때: 덜컥 걸리는 2단 타격감
+        navigator.vibrate([110, 40, 160]);
       } else if (pattern === 'success') {
-        // 거래 성공: 경쾌하고 확실한 3단 펄스
+        // 거래 성공
         navigator.vibrate([80, 50, 80, 50, 200]);
       } else if (pattern === 'fail') {
-        // 거래 실패: 무겁게 뚝 떨어지는 긴 진동 (350ms)
+        // 거래 실패
         navigator.vibrate([350]);
       } else {
         navigator.vibrate(80);
