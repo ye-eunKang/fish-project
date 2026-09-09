@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>주사위 흔들기 & 햅틱 인터랙션</title>
+  <title>물건 거래 인터랙션</title>
   <style>
     * {
       box-sizing: border-box;
@@ -16,223 +16,225 @@
       padding: 0;
       width: 100vw;
       height: 100vh;
-      background-color: #f8fafc;
+      background-color: #ffffff;
       overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
     }
 
-    /* iOS 센서 활성화 버튼 */
+    /* 시작 버튼 (iOS 센서 권한 허용용) */
     #start-btn {
       position: absolute;
       z-index: 100;
       padding: 14px 28px;
       font-size: 16px;
       font-weight: bold;
-      background: #1e293b;
+      background: #111;
       color: #fff;
       border: none;
       border-radius: 30px;
       cursor: pointer;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
 
-    /* 상단 안내 박스 */
-    #hud {
-      position: absolute;
-      top: 40px;
+    /* 1번 사진: 초기 안내 박스 */
+    #intro-box {
+      background-color: #e5e7eb;
+      color: #111827;
+      font-size: 17px;
+      font-weight: 500;
+      padding: 16px 30px;
+      border-radius: 12px;
       text-align: center;
-      pointer-events: none;
-      z-index: 10;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      animation: pulse 1.6s infinite;
     }
-    #guide-text {
-      font-size: 18px;
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    /* 2, 3, 4번 사진: 메인 거래 컨테이너 */
+    #trade-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 650px;
+      padding: 0 24px;
+      position: relative;
+    }
+
+    /* 5, 6, 7번 사진: 원형 아이템 */
+    #item-circle {
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      font-weight: bold;
+      color: #000;
+      margin-bottom: 25px;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+    }
+
+    /* 거래하기 버튼 (우측 정렬) */
+    #trade-action-wrapper {
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+    }
+    #trade-btn {
+      background-color: #bbf7d0; /* 연두색 */
+      color: #15803d;
+      font-size: 16px;
       font-weight: 600;
-      color: #334155;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 24px;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.08);
     }
-    #sub-text {
-      font-size: 13px;
-      color: #94a3b8;
-      margin-top: 6px;
-    }
-
-    /* 3D 주사위 씬 */
-    .scene {
-      width: 120px;
-      height: 120px;
-      perspective: 600px;
-      margin-top: 20px;
+    #trade-btn:active {
+      transform: scale(0.95);
     }
 
-    .cube {
+    /* 하단 설명문 박스 */
+    #desc-box {
+      width: 100%;
+      background-color: #f3f4f6;
+      border-radius: 12px;
+      padding: 20px 24px;
+      color: #1f2937;
+      font-size: 15px;
+      line-height: 1.65;
+      word-break: keep-all;
+    }
+
+    /* 결과 모달/화면 */
+    #result-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      position: relative;
-      transform-style: preserve-3d;
-      transform: translateZ(-60px) rotateX(-20deg) rotateY(-25deg);
-      transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.3, 1.2);
-    }
-
-    .cube.shaking {
-      animation: diceRoll 0.35s infinite linear;
-    }
-
-    @keyframes diceRoll {
-      0% { transform: translateZ(-60px) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
-      25% { transform: translateZ(-60px) rotateX(90deg) rotateY(180deg) rotateZ(45deg); }
-      50% { transform: translateZ(-60px) rotateX(180deg) rotateY(270deg) rotateZ(90deg); }
-      75% { transform: translateZ(-60px) rotateX(270deg) rotateY(90deg) rotateZ(135deg); }
-      100% { transform: translateZ(-60px) rotateX(360deg) rotateY(360deg) rotateZ(180deg); }
-    }
-
-    /* 주사위 각 면 */
-    .cube-face {
-      position: absolute;
-      width: 120px;
-      height: 120px;
       background: #ffffff;
-      border: 3px solid #e2e8f0;
-      border-radius: 18px;
-      box-shadow: inset 0 0 12px rgba(0,0,0,0.06), 0 4px 10px rgba(0,0,0,0.08);
-      display: grid;
-      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
-      padding: 16px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 24px;
+      text-align: center;
     }
-
-    /* 3D 주사위 면 배치 */
-    .face-1 { transform: rotateY(0deg) translateZ(60px); }
-    .face-6 { transform: rotateY(180deg) translateZ(60px); }
-    .face-3 { transform: rotateY(90deg) translateZ(60px); }
-    .face-4 { transform: rotateY(-90deg) translateZ(60px); }
-    .face-5 { transform: rotateX(90deg) translateZ(60px); }
-    .face-2 { transform: rotateX(-90deg) translateZ(60px); }
-
-    /* 주사위 눈금(점) 스타일 */
-    .dot {
-      width: 16px;
-      height: 16px;
-      background-color: #0f172a;
-      border-radius: 50%;
-      align-self: center;
-      justify-self: center;
+    #result-screen.active {
+      display: flex;
     }
-    .face-1 .dot { background-color: #ef4444; width: 22px; height: 22px; } /* 1번 빨간 점 */
-
-    /* 눈금 배치 */
-    .dot-center { grid-area: 2 / 2; }
-    .dot-tl { grid-area: 1 / 1; }
-    .dot-tr { grid-area: 1 / 3; }
-    .dot-ml { grid-area: 2 / 1; }
-    .dot-mr { grid-area: 2 / 3; }
-    .dot-bl { grid-area: 3 / 1; }
-    .dot-br { grid-area: 3 / 3; }
-
-    /* 하단 결과 뱃지 */
-    #result-badge {
-      margin-top: 50px;
-      padding: 8px 20px;
-      background: #e2e8f0;
-      border-radius: 20px;
-      font-size: 15px;
+    #result-title {
+      font-size: 28px;
       font-weight: bold;
-      color: #475569;
-      transition: all 0.3s ease;
+      margin-bottom: 14px;
     }
-
-    /* iOS 햅틱 유도용 히든 토글 */
-    #ios-haptic-toggle {
-      position: absolute;
-      opacity: 0;
-      pointer-events: none;
+    #result-desc {
+      font-size: 16px;
+      color: #4b5563;
+      line-height: 1.6;
+      max-width: 480px;
+    }
+    #retry-btn {
+      margin-top: 30px;
+      padding: 12px 26px;
+      font-size: 15px;
+      font-weight: 600;
+      background: #e5e7eb;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-  <!-- iOS Taptic Engine 유도용 숨김 요소 -->
-  <input type="checkbox" id="ios-haptic-toggle">
+  <button id="start-btn">거래 시작 (센서 활성화)</button>
 
-  <button id="start-btn">주사위 굴리기 시작 (센서 활성화)</button>
-
-  <div id="hud">
-    <div id="guide-text">폰을 흔들어 주사위를 굴리세요!</div>
-    <div id="sub-text">(화면을 터치해도 굴러갑니다)</div>
+  <!-- 1번 화면: 최초 안내 박스 -->
+  <div id="intro-box">
+    폰을 흔들어 교환할 물건을 꺼내보세요
   </div>
 
-  <div class="scene">
-    <div id="cube" class="cube">
-      <!-- 1번 면 -->
-      <div class="cube-face face-1">
-        <div class="dot dot-center"></div>
-      </div>
-      <!-- 2번 면 -->
-      <div class="cube-face face-2">
-        <div class="dot dot-tl"></div>
-        <div class="dot dot-br"></div>
-      </div>
-      <!-- 3번 면 -->
-      <div class="cube-face face-3">
-        <div class="dot dot-tl"></div>
-        <div class="dot dot-center"></div>
-        <div class="dot dot-br"></div>
-      </div>
-      <!-- 4번 면 -->
-      <div class="cube-face face-4">
-        <div class="dot dot-tl"></div>
-        <div class="dot dot-tr"></div>
-        <div class="dot dot-bl"></div>
-        <div class="dot dot-br"></div>
-      </div>
-      <!-- 5번 면 -->
-      <div class="cube-face face-5">
-        <div class="dot dot-tl"></div>
-        <div class="dot dot-tr"></div>
-        <div class="dot dot-center"></div>
-        <div class="dot dot-bl"></div>
-        <div class="dot dot-br"></div>
-      </div>
-      <!-- 6번 면 -->
-      <div class="cube-face face-6">
-        <div class="dot dot-tl"></div>
-        <div class="dot dot-tr"></div>
-        <div class="dot dot-ml"></div>
-        <div class="dot dot-mr"></div>
-        <div class="dot dot-bl"></div>
-        <div class="dot dot-br"></div>
-      </div>
+  <!-- 2, 3, 4번 화면: 아이템 등장 및 거래 조작 영역 -->
+  <div id="trade-container">
+    <div id="item-circle">랜덤 1</div>
+    <div id="trade-action-wrapper">
+      <button id="trade-btn">거래하기</button>
     </div>
+    <div id="desc-box"></div>
   </div>
 
-  <div id="result-badge">결과: 대기 중</div>
+  <!-- 결과 화면 -->
+  <div id="result-screen">
+    <div id="result-title"></div>
+    <div id="result-desc"></div>
+    <button id="retry-btn">다시 흔들기</button>
+  </div>
 
   <script>
-    const startBtn = document.getElementById('start-btn');
-    const cube = document.getElementById('cube');
-    const resultBadge = document.getElementById('result-badge');
-    const hapticToggle = document.getElementById('ios-haptic-toggle');
+    // 아이템 데이터 정의 (1, 2는 실패 / 3은 성공)
+    const items = [
+      {
+        id: 1,
+        title: "랜덤 1",
+        color: "#fecaca", // 연분홍
+        desc: "주머니에서 oo이 나왔다. 사람들에게 많은 인기를 끌었던 방송에 많이 등장했던 것 같다.<br>이 예능프로의 팬이라면 이 거래를 승낙할 수도 있다.",
+        isSuccess: false,
+        failReason: "상대방이 고개를 갸웃거리며 물건을 거절했습니다.<br>(거래 실패)"
+      },
+      {
+        id: 2,
+        title: "랜덤 2",
+        color: "#fef9c3", // 연노랑
+        desc: "주머니에서 영수증이 나왔다.<br>돈이나 물품을 받았다는 사실을 증명하기 위해 발행하는 증서이다.<br>영수증에 따르면 점심에 아주 맛있는 음식을 먹은 것으로 보인다.",
+        isSuccess: false,
+        failReason: "구겨진 영수증을 보고 상대방이 등을 돌렸습니다.<br>(거래 실패)"
+      },
+      {
+        id: 3,
+        title: "랜덤 3",
+        color: "#bbf7d0", // 연두
+        desc: "주머니에서 뜨개로 만든 네잎클로버가 나왔다.<br>네잎클로버는 일반적인 세잎 토끼풀의 희귀한 변이로, 잎이 세 개 대신 네 개의 작은 잎을 가지고 있다.<br>전해 내려오는 말에 따르면 이러한 토끼풀은 행운을 가져다준다고 한다.",
+        isSuccess: true,
+        successMessage: "네잎클로버의 온기에 이끌려 물고기가 모습을 드러냅니다.<br>(거래 성공!)"
+      }
+    ];
 
+    let currentItemIndex = null;
+    let isTradeLocked = false;
     let hasStarted = false;
-    let isRolling = false;
 
-    // 가속도 센서 임계치
+    // 가속도 센서 변수
     let lastX = null, lastY = null, lastZ = null;
-    let lastShakeTimestamp = 0;
-    const SHAKE_THRESHOLD = 18; // 흔들기 감도
+    let lastShakeTime = 0;
+    const SHAKE_THRESHOLD = 16; // 흔들기 감도
 
-    // 눈금별 정면 착지 3D 회전 각도
-    const faceRotations = {
-      1: { x: 0, y: 0 },
-      6: { x: 0, y: 180 },
-      3: { x: 0, y: -90 },
-      4: { x: 0, y: 90 },
-      5: { x: -90, y: 0 },
-      2: { x: 90, y: 0 }
-    };
+    const startBtn = document.getElementById('start-btn');
+    const introBox = document.getElementById('intro-box');
+    const tradeContainer = document.getElementById('trade-container');
+    const itemCircle = document.getElementById('item-circle');
+    const descBox = document.getElementById('desc-box');
+    const tradeBtn = document.getElementById('trade-btn');
+    const resultScreen = document.getElementById('result-screen');
+    const resultTitle = document.getElementById('result-title');
+    const resultDesc = document.getElementById('result-desc');
+    const retryBtn = document.getElementById('retry-btn');
 
-    // 1. 센서 권한 허용 (iOS Safari 대응)
+    // 1. 센서 권한 허용 및 리스너 등록
     startBtn.addEventListener('click', async () => {
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
         try {
@@ -240,7 +242,7 @@
           if (res === 'granted') {
             window.addEventListener('devicemotion', handleMotion);
           } else {
-            alert('모션 센서 권한이 거부되었습니다.');
+            alert('모션 센서 권한이 필요합니다.');
           }
         } catch (e) {
           console.error(e);
@@ -250,24 +252,24 @@
       }
       startBtn.style.display = 'none';
       hasStarted = true;
-      triggerHaptic('tap');
+      vibrateStrong('tap'); // 시작 터치 피드백
     });
 
-    // 화면 터치/클릭으로도 굴리기 테스트 가능
-    window.addEventListener('pointerdown', (e) => {
-      if (!hasStarted || e.target === startBtn || isRolling) return;
-      rollDice();
+    // 화면 터치로도 흔들기 기능 트리거 (PC 및 터치 겸용)
+    window.addEventListener('click', (e) => {
+      if (!hasStarted || isTradeLocked || e.target === tradeBtn || e.target === retryBtn) return;
+      onDeviceShaken();
     });
 
     // 2. 가속도 감지 (흔들림 포착)
     function handleMotion(e) {
-      if (!hasStarted || isRolling) return;
+      if (!hasStarted || isTradeLocked) return;
 
       const acc = e.accelerationIncludingGravity || e.acceleration;
       if (!acc) return;
 
       const now = performance.now();
-      if (now - lastShakeTimestamp < 400) return; // 0.4초 쿨다운
+      if (now - lastShakeTime < 500) return; // 0.5초 쿨다운
 
       if (lastX !== null) {
         const deltaX = Math.abs(acc.x - lastX);
@@ -275,8 +277,8 @@
         const deltaZ = Math.abs(acc.z - lastZ);
 
         if (deltaX + deltaY + deltaZ > SHAKE_THRESHOLD) {
-          lastShakeTimestamp = now;
-          rollDice();
+          lastShakeTime = now;
+          onDeviceShaken();
         }
       }
 
@@ -285,64 +287,88 @@
       lastZ = acc.z;
     }
 
-    // 3. 주사위 굴리기 및 햅틱 효과 실행
-    function rollDice() {
-      if (isRolling) return;
-      isRolling = true;
+    // 3. 기기를 흔들었을 때 실행 (아이템 랜덤 교체 & 강한 햅틱)
+    function onDeviceShaken() {
+      // 흔들릴 때 덜컹거리는 묵직한 더블 임팩트 진동
+      vibrateStrong('shake');
 
-      resultBadge.textContent = "구르는 중...";
-      resultBadge.style.background = "#cbd5e1";
-      resultBadge.style.color = "#334155";
-
-      // 굴러갈 때: 덜컹거리는 연타 햅틱 진동 패턴 실행
-      triggerHaptic('roll');
-
-      // 3D 회전 애니메이션 시작
-      cube.classList.add('shaking');
-
-      // 1초 후 멈추고 눈금 확정
-      setTimeout(() => {
-        cube.classList.remove('shaking');
-
-        // 1~6 중 랜덤 추출
-        const outcome = Math.floor(Math.random() * 6) + 1;
-        const targetRot = faceRotations[outcome];
-
-        // 3D 착지 회전 적용 (기본 360도 배수를 더해 회전감 부여)
-        cube.style.transform = `translateZ(-60px) rotateX(${targetRot.x + 360}deg) rotateY(${targetRot.y + 360}deg)`;
-
-        // 멈추는 순간: 묵직한 착지 충격 햅틱 진동
-        triggerHaptic('impact');
-
-        resultBadge.textContent = `눈금: ${outcome}`;
-        resultBadge.style.background = outcome === 1 ? "#fee2e2" : "#e0f2fe";
-        resultBadge.style.color = outcome === 1 ? "#dc2626" : "#0284c7";
-
-        setTimeout(() => {
-          isRolling = false;
-        }, 500);
-      }, 900);
-    }
-
-    // 4. 멀티 플랫폼 햅틱 진동 처리 함수
-    function triggerHaptic(type) {
-      // 1) 안드로이드 표준 진동 API
-      if (navigator.vibrate) {
-        if (type === 'roll') {
-          // 주사위가 컵 안에서 튀는 듯한 따르르륵 리듬 진동 (진동, 쉼, 진동...)
-          navigator.vibrate([35, 40, 45, 40, 50, 40, 60]);
-        } else if (type === 'impact') {
-          // 바닥에 탁 멈춰 서는 묵직한 피니시 타격
-          navigator.vibrate([120]);
-        } else {
-          navigator.vibrate(40);
-        }
+      // 1번 안내문 숨기고 아이템 UI 표시
+      if (introBox.style.display !== 'none') {
+        introBox.style.display = 'none';
+        tradeContainer.style.display = 'flex';
       }
 
-      // 2) iOS Taptic Engine 호환 트리거 시도
-      try {
-        hapticToggle.checked = !hapticToggle.checked;
-      } catch (e) {}
+      // 이전 아이템과 중복되지 않게 랜덤 선택
+      let nextIndex;
+      do {
+        nextIndex = Math.floor(Math.random() * items.length);
+      } while (items.length > 1 && nextIndex === currentItemIndex);
+
+      currentItemIndex = nextIndex;
+      renderItem(items[currentItemIndex]);
+    }
+
+    // 아이템 정보 렌더링
+    function renderItem(item) {
+      itemCircle.style.transform = 'scale(0.85)';
+      setTimeout(() => {
+        itemCircle.textContent = item.title;
+        itemCircle.style.backgroundColor = item.color;
+        itemCircle.style.transform = 'scale(1)';
+      }, 100);
+
+      descBox.innerHTML = item.desc;
+    }
+
+    // 4. '거래하기' 버튼 클릭 처리
+    tradeBtn.addEventListener('click', () => {
+      if (currentItemIndex === null || isTradeLocked) return;
+      isTradeLocked = true;
+
+      const currentItem = items[currentItemIndex];
+
+      if (currentItem.isSuccess) {
+        // [랜덤 3]: 성공 진동 (빠른 리듬의 축하 3단 펄스)
+        vibrateStrong('success');
+        resultTitle.textContent = "거래 성사!";
+        resultTitle.style.color = "#16a34a";
+        resultDesc.innerHTML = currentItem.successMessage;
+        retryBtn.style.display = 'none';
+      } else {
+        // [랜덤 1, 2]: 실패 진동 (묵직하고 긴 단일 저음 진동)
+        vibrateStrong('fail');
+        resultTitle.textContent = "거래 실패...";
+        resultTitle.style.color = "#dc2626";
+        resultDesc.innerHTML = currentItem.failReason;
+        retryBtn.style.display = 'inline-block';
+      }
+
+      resultScreen.classList.add('active');
+    });
+
+    // 실패 후 다시 흔들기
+    retryBtn.addEventListener('click', () => {
+      resultScreen.classList.remove('active');
+      isTradeLocked = false;
+      onDeviceShaken();
+    });
+
+    // 5. 체감 강도를 높인 햅틱 진동 함수
+    function vibrateStrong(pattern) {
+      if (!navigator.vibrate) return;
+
+      if (pattern === 'shake') {
+        // 흔들 때: 주머니에서 물건이 덜컹 떨어지는 묵직한 2단 타격 (120ms 진동 - 40ms 쉼 - 180ms 진동)
+        navigator.vibrate([120, 40, 180]);
+      } else if (pattern === 'success') {
+        // 거래 성공: 경쾌하고 확실한 3단 펄스
+        navigator.vibrate([80, 50, 80, 50, 200]);
+      } else if (pattern === 'fail') {
+        // 거래 실패: 무겁게 뚝 떨어지는 긴 진동 (350ms)
+        navigator.vibrate([350]);
+      } else {
+        navigator.vibrate(80);
+      }
     }
   </script>
 </body>
